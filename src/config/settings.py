@@ -2,17 +2,12 @@ import os
 
 class Settings:
     PROJECT_NAME = "Football Betting System V2"
-    LOG_FILE = "logs/betting_system.log"
+    # Las llaves se leen del entorno (GitHub Secrets o Docker)
+    ODDS_API_KEY = os.getenv("ODDS_API_KEY")
+    AF_API_KEY = os.getenv("AF_API_KEY")
+    
+    DEFAULT_SPORT = "soccer_mexico_ligamx"
     DATA_DIR = "data"
-    
-    # API Keys
-    AF_API_KEY = os.getenv("AF_API_KEY", "TU_LLAVE_FOOTBALL_API")
-    ODDS_API_KEY = os.getenv("ODDS_API_KEY", "TU_LLAVE_THE_ODDS_API")
-    
-    # Configuración de búsqueda
-    # Deportes disponibles: 'soccer_mexico_ligamx', 'soccer_spain_la_liga', 'soccer_usa_mls'
-    DEFAULT_SPORT = "soccer_mexico_ligamx" 
-    REGIONS = "us" # Puedes usar 'eu', 'us', 'uk', 'au'
-    MARKETS = "h2h" # Ganador, Empate, Visitante
+    HISTORY_FILE = os.path.join(DATA_DIR, "history.json")
 
 settings = Settings()

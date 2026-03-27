@@ -2,23 +2,24 @@ import requests
 from src.config.settings import settings
 
 class OddsClient:
-    def __init__(self, api_key):
-        self.api_key = api_key
+    def __init__(self):
+        self.api_key = settings.ODDS_API_KEY
         self.base_url = "https://api.the-odds-api.com/v4/sports"
 
-    def get_live_odds(self, sport="soccer_mexico_ligamx", region="us"):
-        """Obtiene momios en vivo para una liga específica."""
-        url = f"{self.base_url}/{sport}/odds/"
+    def fetch_live_odds(self):
+        """Obtiene las cuotas más recientes de la liga configurada."""
+        url = f"{self.base_url}/{settings.DEFAULT_SPORT}/odds/"
         params = {
             'api_key': self.api_key,
-            'regions': region, # 'us' o 'eu'
-            'markets': 'h2h',  # Local, Empate, Visitante
+            'regions': settings.REGIONS,
+            'markets': settings.MARKETS,
             'oddsFormat': 'decimal'
         }
         
-        response = requests.get(url, params=params)
-        if response.status_code == 200:
+        try:
+            response = requests.get(url, params=params)
+            response.raise_for_status() # Lanza error si la API falla
             return response.json()
-        else:
-            print(f"Error: {response.status_code}")
-            return None
+        except Exception as e:
+            print(f"Error al conectar con The Odds API: {e}")
+            return []

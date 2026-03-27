@@ -1,23 +1,39 @@
 version: '3.8'
 
 services:
-  betting-app:
+  betting-system:
     build: .
+    container_name: nuvi_core_bot
+    restart: always
+    env_file: .env
+    environment:
+      - ODDS_API_KEY=${ODDS_API_KEY}
+      - AF_API_KEY=${AF_API_KEY}
     volumes:
       - ./data:/app/data
-    environment:
-      - AF_API_KEY=${AF_API_KEY}
+    networks:
+      - betting_network
 
   prometheus:
     image: prom/prometheus
+    container_name: prometheus_monitor
     ports:
       - "9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - betting_network
 
   grafana:
     image: grafana/grafana
+    container_name: grafana_viz
     ports:
       - "3000:3000"
     depends_on:
       - prometheus
+    networks:
+      - betting_network
+
+networks:
+  betting_network:
+    driver: bridge

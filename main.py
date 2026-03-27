@@ -1,49 +1,61 @@
 import time
 from src.config.settings import settings
-from src.data.processor import DataProcessor
+from src.data.odds_client import OddsClient
 from src.models.engine import PredictionEngine
 from src.strategy.bankroll_mgmt import BettingStrategy
 from src.monitoring.metrics import PerformanceTracker
 
 def run_bot():
-    print(f"--- {settings.PROJECT_NAME} ACTIVADO ---")
+    print(f"--- {settings.PROJECT_NAME} CONEXIÓN REAL ---")
     
-    # Inicializar componentes
-    processor = DataProcessor()
+    # 1. Inicializar herramientas
+    client = OddsClient()
     engine = PredictionEngine()
     strategy = BettingStrategy()
     tracker = PerformanceTracker()
 
-    # Simulación de flujo de trabajo
-    print("Buscando partidos en vivo...")
-    
-    # Datos de ejemplo (Simulando lo que vendría de la API)
-    match_data = {
-        "home_team": "Real Madrid",
-        "away_team": "Barcelona",
-        "home_exp_goals": 2.1,
-        "away_exp_goals": 1.4,
-        "odds": 2.10
-    }
+    # 2. Obtener datos reales de The Odds API
+    print(f"Obteniendo momios para: {settings.DEFAULT_SPORT}...")
+    matches = client.fetch_live_odds()
 
-    # 1. Procesar
-    print(f"Analizando: {match_data['home_team']} vs {match_data['away_team']}")
-    
-    # 2. Predecir
-    prediction = engine.predict_score(match_data['home_exp_goals'], match_data['away_exp_goals'])
-    prob_win = 0.55  # Probabilidad calculada por motor
-    
-    # 3. Estrategia
-    value = strategy.calculate_value(prob_win, match_data['odds'])
-    
-    if value > 0:
-        stake = strategy.kelly_criterion(prob_win, match_data['odds'], bankroll=1000)
-        print(f"¡VALOR ENCONTRADO! Apostar: ${stake:.2f}")
-        tracker.log_bet("M1", "Win", "Win", stake, stake * (match_data['odds'] - 1))
-    else:
-        print("No hay valor suficiente en este partido.")
+    if not matches:
+        print("No se encontraron partidos activos o la API Key es inválida.")
+        return
 
-    print(f"ROI Actual: {tracker.get_roi():.2%}")
+    # 3. Procesar cada partido encontrado
+    for match in matches:
+        home_team = match['home_team']
+        away_team = match['away_team']
+        
+        # Buscamos el primer 'bookmaker' (casa de apuestas) disponible
+        if not match['bookmakers']: continue
+        
+        bookie = match['bookmakers'][0]
+        outcomes = bookie['markets'][0]['outcomes']
+        
+        # Extraer cuotas: Local, Empate, Visitante
+        # Nota: Asumimos que el índice 0 es el equipo local usualmente
+        odds_home = next(o['price'] for o in outcomes if o['name'] == home_team)
+        
+        print(f"\nAnalizando: {home_team} vs {away_team}")
+        print(f"Cuota en {bookie['title']}: {odds_home}")
+
+        # --- Lógica de Predicción ---
+        # Aquí normalmente usarías estadísticas de API-Football. 
+        # Por ahora, usamos una probabilidad estimada (60% por ejemplo)
+        probabilidad_estimada = 0.58 
+        
+        # --- Cálculo de Valor ---
+        valor = strategy.calculate_value(probabilidad_estimada, odds_home)
+        
+        if valor > 0.05: # Si el valor es mayor al 5%
+            monto_apuesta = strategy.kelly_criterion(probabilidad_estimada, odds_home, bankroll=1000)
+            print(f"¡ALERTA DE APUESTA! Apostar ${monto_apuesta:.2f} a {home_team}")
+            tracker.log_bet(match['id'], "Home", "Pendiente", monto_apuesta, 0)
+        else:
+            print("Sin valor suficiente para apostar.")
+
+    print("\nAnálisis finalizado.")
 
 if __name__ == "__main__":
     run_bot()

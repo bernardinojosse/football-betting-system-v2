@@ -1,4 +1,4 @@
 requests
 pandas
-flask
-prometheus_client
+numpy
+python-dotenv

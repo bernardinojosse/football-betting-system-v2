@@ -1,17 +1,23 @@
 import os
 
 class Config:
-    # Captura las llaves de los Secrets de GitHub
+    # Captura las llaves de GitHub Secrets
     ODDS_API_KEY = os.getenv("ODDS_API_KEY")
     AF_API_KEY = os.getenv("AF_API_KEY")
     
-    # Configuración de la API de Football
+    # Configuraciones por defecto
     BASE_URL = "https://v3.football.api-sports.io"
+    DEFAULT_SPORT = "soccer_mexico_ligamx"
     
-    # Configuración de entorno
-    # Si no hay valor, usa 'INFO' por defecto para evitar errores
-    LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+    @classmethod
+    def validate(cls):
+        if not cls.ODDS_API_KEY:
+            print("❌ ERROR: ODDS_API_KEY no encontrada en Secrets de GitHub.")
+            return False
+        if not cls.AF_API_KEY:
+            print("❌ ERROR: AF_API_KEY no encontrada en Secrets de GitHub.")
+            return False
+        return True
 
-# Verificación de seguridad rápida
-if not Config.ODDS_API_KEY or not Config.AF_API_KEY:
-    print("⚠️ Error: Las API Keys no se detectaron en el entorno.")
+# Esto facilita la importación en otros archivos
+config = Config()

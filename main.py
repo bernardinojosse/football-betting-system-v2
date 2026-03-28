@@ -3,79 +3,83 @@ import sys
 import json
 from datetime import datetime
 
-# Agregamos 'src' al sistema para que encuentre las carpetas nuevas
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+# Obligamos a Python a mirar dentro de 'src'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.join(BASE_DIR, 'src'))
 
-# IMPORTACIONES BASADAS EN TU IMAGEN:
+# IMPORTACIONES SIN ACENTOS
 try:
-    # De 'configuración' importamos settings
-    from configuración.settings import settings
-    # De 'datos' importamos el cliente de momios
+    # Cambiamos 'configuración' por 'configuracion'
+    from configuracion.settings import settings
     from datos.odds_client import OddsClient
-    # De 'estrategia' (asegúrate que bankroll_mgmt.py esté ahí o ajusta el nombre)
-    # Si no tienes el archivo de estrategia aún, comentamos esta línea:
-    # from estrategia.bankroll_mgmt import BettingStrategy 
 except ImportError as e:
     print(f"❌ Error de importación: {e}")
-    # Si falla una importación, el bot nos dirá exactamente cuál nombre no coincide
+    print("Asegúrate de haber renombrado la carpeta 'configuración' a 'configuracion' (sin acento).")
     sys.exit(1)
 
-def guardar_historial(nuevos_datos):
-    """Guarda los resultados en la carpeta 'datos' (fuera de src) o 'datos' (dentro)."""
-    # Basado en tu imagen, usaremos la carpeta 'datos' de la raíz
+def guardar_resultado(datos_nuevos):
+    """Guarda en la carpeta datos de la raíz."""
     ruta = 'datos/historial.json'
-    if not os.path.exists('datos'): os.makedirs('datos')
+    if not os.path.exists('datos'):
+        os.makedirs('datos')
     
     historial = []
     if os.path.exists(ruta):
         try:
             with open(ruta, 'r', encoding='utf-8') as f:
                 historial = json.load(f)
-        except: historial = []
+        except:
+            historial = []
     
-    historial.extend(nuevos_datos)
+    historial.extend(datos_nuevos)
     with open(ruta, 'w', encoding='utf-8') as f:
         json.dump(historial, f, indent=4, ensure_ascii=False)
 
 def run_bot():
-    print(f"🚀 NUVI-CORE Iniciado: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"🚀 Ejecución: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
+    # Validar API Key directamente del entorno de GitHub
     api_key = os.getenv("ODDS_API_KEY")
     if not api_key:
-        print("❌ Faltan los Secrets de GitHub (ODDS_API_KEY).")
+        print("❌ ERROR: Configura el Secret 'ODDS_API_KEY' en GitHub.")
         return
 
-    # Inicializar cliente de datos
     client = OddsClient()
     
-    print("📡 Buscando momios en vivo...")
-    partidos = client.fetch_live_odds()
-
-    if not partidos:
-        print("⚠️ No se encontraron partidos.")
+    print("📡 Consultando The Odds API...")
+    try:
+        partidos = client.fetch_live_odds()
+    except Exception as e:
+        print(f"❌ Error al llamar a la API: {e}")
         return
 
-    hallazgos = []
+    if not partidos:
+        print("⚠️ No hay partidos disponibles.")
+        return
+
+    oportunidades = []
     for p in partidos:
         try:
-            home = p['home_team']
+            home = p.get('home_team')
             if not p.get('bookmakers'): continue
             
+            # Cuota decimal
             cuota = p['bookmakers'][0]['markets'][0]['outcomes'][0]['price']
             
-            # Lógica simple de valor (Probabilidad estimada 58%)
+            # Si el valor esperado es positivo (usando 58% como base)
             if (0.58 * cuota) > 1.05:
-                print(f"✅ Valor detectado: {home} a cuota {cuota}")
-                hallazgos.append({
+                print(f"✅ ¡VALOR! {home} a cuota {cuota}")
+                oportunidades.append({
                     "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "equipo": home,
+                    "partido": f"{home} vs {p.get('away_team')}",
                     "cuota": cuota
                 })
-        except: continue
+        except:
+            continue
 
-    if hallazgos:
-        guardar_historial(hallazgos)
-        print(f"📂 {len(hallazgos)} apuestas guardadas.")
+    if oportunidades:
+        guardar_resultado(oportunidades)
+        print(f"📂 Guardadas {len(oportunidades)} posibles apuestas.")
 
 if __name__ == "__main__":
     run_bot()

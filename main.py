@@ -3,83 +3,87 @@ import sys
 import json
 from datetime import datetime
 
-# Obligamos a Python a mirar dentro de 'src'
+# Add 'src' to the system path to find the modules
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(BASE_DIR, 'src'))
 
-# IMPORTACIONES SIN ACENTOS
+# SAFE IMPORTS (English names)
 try:
-    # Cambiamos 'configuración' por 'configuracion'
-    from configuracion.settings import settings
-    from datos.odds_client import OddsClient
+    from config.settings import settings
+    from data.odds_client import OddsClient
+    from monitoring.metrics import PerformanceTracker
 except ImportError as e:
-    print(f"❌ Error de importación: {e}")
-    print("Asegúrate de haber renombrado la carpeta 'configuración' a 'configuracion' (sin acento).")
+    print(f"❌ Import Error: {e}")
+    print("Check if your folders are named 'config', 'data', and 'monitoring' (no accents).")
     sys.exit(1)
 
-def guardar_resultado(datos_nuevos):
-    """Guarda en la carpeta datos de la raíz."""
-    ruta = 'datos/historial.json'
-    if not os.path.exists('datos'):
-        os.makedirs('datos')
+def save_to_history(new_data):
+    """Saves findings to the root data folder."""
+    file_path = 'data/history.json'
+    if not os.path.exists('data'):
+        os.makedirs('data')
     
-    historial = []
-    if os.path.exists(ruta):
+    history = []
+    if os.path.exists(file_path):
         try:
-            with open(ruta, 'r', encoding='utf-8') as f:
-                historial = json.load(f)
+            with open(file_path, 'r', encoding='utf-8') as f:
+                history = json.load(f)
         except:
-            historial = []
+            history = []
     
-    historial.extend(datos_nuevos)
-    with open(ruta, 'w', encoding='utf-8') as f:
-        json.dump(historial, f, indent=4, ensure_ascii=False)
+    history.extend(new_data)
+    with open(file_path, 'w', encoding='utf-8') as f:
+        json.dump(history, f, indent=4, ensure_ascii=False)
 
 def run_bot():
-    print(f"🚀 Ejecución: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"🚀 NUVI-CORE V2 Starting: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    # Validar API Key directamente del entorno de GitHub
+    # Validate API Key from GitHub Secrets
     api_key = os.getenv("ODDS_API_KEY")
     if not api_key:
-        print("❌ ERROR: Configura el Secret 'ODDS_API_KEY' en GitHub.")
+        print("❌ ERROR: ODDS_API_KEY not found in GitHub Secrets.")
         return
 
+    # Initialize components
     client = OddsClient()
+    tracker = PerformanceTracker()
     
-    print("📡 Consultando The Odds API...")
+    print("📡 Fetching live odds from API...")
     try:
-        partidos = client.fetch_live_odds()
+        matches = client.fetch_live_odds()
     except Exception as e:
-        print(f"❌ Error al llamar a la API: {e}")
+        print(f"❌ API Call failed: {e}")
         return
 
-    if not partidos:
-        print("⚠️ No hay partidos disponibles.")
+    if not matches:
+        print("⚠️ No matches found at this time.")
         return
 
-    oportunidades = []
-    for p in partidos:
+    opportunities = []
+    for m in matches:
         try:
-            home = p.get('home_team')
-            if not p.get('bookmakers'): continue
+            home_team = m.get('home_team')
+            if not m.get('bookmakers'): continue
             
-            # Cuota decimal
-            cuota = p['bookmakers'][0]['markets'][0]['outcomes'][0]['price']
+            # Get the first available decimal odd
+            current_odd = m['bookmakers'][0]['markets'][0]['outcomes'][0]['price']
             
-            # Si el valor esperado es positivo (usando 58% como base)
-            if (0.58 * cuota) > 1.05:
-                print(f"✅ ¡VALOR! {home} a cuota {cuota}")
-                oportunidades.append({
-                    "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "partido": f"{home} vs {p.get('away_team')}",
-                    "cuota": cuota
+            # Value Logic (Estimated 58% probability)
+            if (0.58 * current_odd) > 1.05:
+                print(f"✅ VALUE FOUND: {home_team} @ {current_odd}")
+                opportunities.append({
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "match": f"{home_team} vs {m.get('away_team')}",
+                    "odd": current_odd
                 })
+                # Log to our performance tracker
+                tracker.log_bet(home_team, current_odd, stake=10.0)
         except:
             continue
 
-    if oportunidades:
-        guardar_resultado(oportunidades)
-        print(f"📂 Guardadas {len(oportunidades)} posibles apuestas.")
+    if opportunities:
+        save_to_history(opportunities)
+        print(f"📂 Saved {len(opportunities)} opportunities to history.json")
 
 if __name__ == "__main__":
     run_bot()

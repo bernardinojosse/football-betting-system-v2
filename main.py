@@ -1,108 +1,81 @@
 import os
+import sys
 import json
-import time
 from datetime import datetime
-# Importamos la configuración desde el archivo de la raíz
+
+# Agregamos 'src' al sistema para que encuentre las carpetas nuevas
+sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+
+# IMPORTACIONES BASADAS EN TU IMAGEN:
 try:
-    from config import Config
-except ImportError:
-    # Si falla la importación, definimos una clase mínima para evitar el crash
-    class Config:
-        ODDS_API_KEY = os.getenv("ODDS_API_KEY")
-        AF_API_KEY = os.getenv("AF_API_KEY")
-        DEFAULT_SPORT = "soccer_mexico_ligamx"
+    # De 'configuración' importamos settings
+    from configuración.settings import settings
+    # De 'datos' importamos el cliente de momios
+    from datos.odds_client import OddsClient
+    # De 'estrategia' (asegúrate que bankroll_mgmt.py esté ahí o ajusta el nombre)
+    # Si no tienes el archivo de estrategia aún, comentamos esta línea:
+    # from estrategia.bankroll_mgmt import BettingStrategy 
+except ImportError as e:
+    print(f"❌ Error de importación: {e}")
+    # Si falla una importación, el bot nos dirá exactamente cuál nombre no coincide
+    sys.exit(1)
 
-# Importación de módulos internos
-from src.data.odds_client import OddsClient
-from src.models.engine import PredictionEngine
-from src.strategy.bankroll_mgmt import BettingStrategy
-from src.monitoring.metrics import PerformanceTracker
-
-def save_history(new_records):
-    """Guarda los hallazgos en data/history.json de forma segura."""
-    file_path = 'data/history.json'
+def guardar_historial(nuevos_datos):
+    """Guarda los resultados en la carpeta 'datos' (fuera de src) o 'datos' (dentro)."""
+    # Basado en tu imagen, usaremos la carpeta 'datos' de la raíz
+    ruta = 'datos/historial.json'
+    if not os.path.exists('datos'): os.makedirs('datos')
     
-    if not os.path.exists('data'):
-        os.makedirs('data')
-
-    history = []
-    if os.path.exists(file_path):
+    historial = []
+    if os.path.exists(ruta):
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                history = json.load(f)
-        except:
-            history = []
-
-    history.extend(new_records)
-
-    with open(file_path, 'w', encoding='utf-8') as f:
-        json.dump(history, f, indent=4, ensure_ascii=False)
-    print(f"✅ Se guardaron {len(new_records)} registros nuevos.")
+            with open(ruta, 'r', encoding='utf-8') as f:
+                historial = json.load(f)
+        except: historial = []
+    
+    historial.extend(nuevos_datos)
+    with open(ruta, 'w', encoding='utf-8') as f:
+        json.dump(historial, f, indent=4, ensure_ascii=False)
 
 def run_bot():
-    print(f"🚀 NUVI-CORE V2 | Iniciando ejecución: {datetime.now()}")
+    print(f"🚀 NUVI-CORE Iniciado: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    # 1. Validación de Credenciales
-    if not Config.ODDS_API_KEY:
-        print("❌ ERROR: No se encontró ODDS_API_KEY. Revisa los Secrets de GitHub.")
+    api_key = os.getenv("ODDS_API_KEY")
+    if not api_key:
+        print("❌ Faltan los Secrets de GitHub (ODDS_API_KEY).")
         return
 
-    # 2. Inicialización
+    # Inicializar cliente de datos
     client = OddsClient()
-    engine = PredictionEngine()
-    strategy = BettingStrategy()
-    tracker = PerformanceTracker()
+    
+    print("📡 Buscando momios en vivo...")
+    partidos = client.fetch_live_odds()
 
-    # 3. Obtener Datos Reales
-    print(f"📡 Conectando a The Odds API para: {Config.DEFAULT_SPORT}...")
-    matches = client.fetch_live_odds()
-
-    if not matches:
-        print("⚠️ No hay partidos disponibles o error de conexión.")
+    if not partidos:
+        print("⚠️ No se encontraron partidos.")
         return
 
-    opportunities = []
-
-    # 4. Procesamiento y Análisis
-    for match in matches:
+    hallazgos = []
+    for p in partidos:
         try:
-            home = match['home_team']
-            away = match['away_team']
+            home = p['home_team']
+            if not p.get('bookmakers'): continue
             
-            if not match.get('bookmakers'): continue
+            cuota = p['bookmakers'][0]['markets'][0]['outcomes'][0]['price']
             
-            # Extraer la cuota del equipo local (Home)
-            outcomes = match['bookmakers'][0]['markets'][0]['outcomes']
-            odd_home = next(o['price'] for o in outcomes if o['name'] == home)
-            
-            # --- MODELO DE PREDICCIÓN ---
-            # Probabilidad base (puedes subirla al 60% para ser más exigente)
-            prob_modelo = 0.58 
-            
-            # --- CÁLCULO DE VALOR ---
-            valor = strategy.calculate_value(prob_modelo, odd_home)
-            
-            if valor > 0.05: # Valor mayor al 5%
-                stake = strategy.kelly_criterion(prob_modelo, odd_home, bankroll=1000)
-                
-                opportunities.append({
-                    "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "partido": f"{home} vs {away}",
-                    "cuota": odd_home,
-                    "valor": round(valor, 4),
-                    "stake_sugerido": round(stake, 2)
+            # Lógica simple de valor (Probabilidad estimada 58%)
+            if (0.58 * cuota) > 1.05:
+                print(f"✅ Valor detectado: {home} a cuota {cuota}")
+                hallazgos.append({
+                    "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "equipo": home,
+                    "cuota": cuota
                 })
-                print(f"✨ VALOR ENCONTRADO: {home} @ {odd_home}")
+        except: continue
 
-        except Exception as e:
-            print(f"⚠️ Error analizando partido: {e}")
-            continue
-
-    # 5. Guardado Final
-    if opportunities:
-        save_history(opportunities)
-    else:
-        print("ℹ️ No se detectaron oportunidades de apuesta en esta jornada.")
+    if hallazgos:
+        guardar_historial(hallazgos)
+        print(f"📂 {len(hallazgos)} apuestas guardadas.")
 
 if __name__ == "__main__":
     run_bot()

@@ -7,6 +7,8 @@ class Settings:
     AF_API_KEY = os.getenv("AF_API_KEY")
     
     DEFAULT_SPORT = "soccer_mexico_ligamx"
+    REGIONS = ['us']
+    MARKETS = ['h2h']
     DATA_DIR = "data"
     HISTORY_FILE = os.path.join(DATA_DIR, "history.json")
 

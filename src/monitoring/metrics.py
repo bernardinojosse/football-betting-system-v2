@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 
 class PerformanceTracker:
-    def __init__(self, data_file='datos/rendimiento.json'):
+    def __init__(self, data_file='data/rendimiento.json'):
         self.data_file = data_file
         self._ensure_data_dir()
 
